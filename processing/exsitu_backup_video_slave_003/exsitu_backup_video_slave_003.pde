@@ -82,7 +82,155 @@ float fps = 60;            // Frames par secondes, mis à jour dynamiquement ci-
 float objet_start;         // en millisecondes, moment d'apparition de l'objet
 float opacite_cache = 255; // valeur d'opacité du cache noir utilisé pour les fondus
 
+// Add more evolve fadein/fadeout for multiple objects (max 8 right now with a maximum opacity of 50% [0.5])
+float MAX_OPACITY_EACH_IMAGE = 0.7;
+int MAX_IMAGES_SAME_TIME = 8;
 
+class DisplayedImage {
+  PImage image_objet;
+  int initTimerMs = 0;
+  
+  // Fade in parameter (duration, initial time of the fadein and end timer of the fadein)
+  int fadeinDurationMs = 0;
+  int fadeinBeginTimer = 0;
+  int fadeinEndTimer = 0;
+  // Same for hold
+  int holdDurationMs = 0;
+  int holdBeginTimer = 0;
+  int holdEndTimer = 0;
+  // Same for fadeout
+  int fadeoutDurationMs = 0;
+  int fadeoutBeginTimer = 0;
+  int fadeoutEndTimer = 0;
+  
+  int currentIntervalDurationMs = 0;
+  
+  DisplayedImage(int id, float fadeinDurationMs, float holdDurationMs, float fadeoutDurationMs) {
+    this.initTimerMs = millis();
+    
+    this.fadeinDurationMs = (int)fadeinDurationMs;
+    this.holdDurationMs = (int)holdDurationMs;
+    this.fadeoutDurationMs = (int)fadeoutDurationMs;
+    
+    this.fadeinBeginTimer = this.initTimerMs;
+    this.fadeinEndTimer = this.initTimerMs + this.fadeinDurationMs;
+    
+    this.holdBeginTimer = this.fadeinEndTimer;
+    this.holdEndTimer = this.holdBeginTimer + this.holdDurationMs;
+    
+    this.fadeoutBeginTimer = this.holdEndTimer;
+    this.fadeoutEndTimer = this.fadeoutBeginTimer + this.fadeinDurationMs;
+    
+    
+    this.chargerImageObjet(dossier_images, id);
+  }
+  
+  float getInitialCreation() {
+   return this.initTimerMs; 
+  }
+  
+  PImage getImage() {
+     return this.image_objet; 
+  }
+  
+  boolean isFinish() {
+   return millis() > (initTimerMs + fadeinDurationMs + holdDurationMs + fadeoutDurationMs);
+  }
+  
+  float getCurrentAlpha() {
+    // Compute a value between 0 (transparent) to 1 (opaque)
+    int currentTimer = millis();
+    // By default no opacity (before and after)
+    float currentOpacity = 0.0;
+    // Hold period (full opacity)
+    if (currentTimer >= this.holdBeginTimer && currentTimer <= this.holdEndTimer) {
+      currentOpacity = 1.0;
+    // Fadein period
+    } else if (currentTimer >= this.fadeinBeginTimer && currentTimer <= this.fadeinEndTimer) {
+      float t_init = 0;
+      float t_current = currentTimer - this.fadeinBeginTimer;
+      float t_end = this.fadeinEndTimer - this.fadeinBeginTimer;
+      currentOpacity = t_current / t_end;
+    // Fadeout period
+    } else if (currentTimer >= this.fadeoutBeginTimer && currentTimer <= this.fadeoutEndTimer) {
+      float t_init = 0;
+      float t_current = currentTimer - this.fadeoutBeginTimer;
+      float t_end = this.fadeoutEndTimer - this.fadeoutBeginTimer;
+      currentOpacity = 1.0 - (t_current / t_end);
+    }
+    return currentOpacity * 255 * MAX_OPACITY_EACH_IMAGE;
+  }
+  
+  // Charger l'image quand un nouvel id est reçu, si jamais le fichier n'existe pas
+  // une image vide est créée à la place...
+  void chargerImageObjet(String dir, int id) {
+    String chemin = dir + "/J" + id + ".jpg";
+    File f = dataFile(chemin);
+    if (f.isFile()) {
+        this.image_objet = loadImage(chemin);
+      } else {
+        println("Le fichier " + chemin + " n'existe pas");
+        this.image_objet = createImage(420, 420, RGB);
+      }
+  }
+}
+
+class AllDisplayedImages {
+   DisplayedImage[] allImages = new DisplayedImage[MAX_IMAGES_SAME_TIME];
+  
+  void addImage(int id, float fadeinDurationMs, float holdDurationMs, float fadeoutDurationMs) {
+     int usedIndex = this.getEmptyIndex();
+     this.allImages[usedIndex] = new DisplayedImage(id, fadeinDurationMs, holdDurationMs, fadeoutDurationMs);
+    println( "Add image on index: " +usedIndex + " for image with the ID : " + id + ". Number of image: " + allImages.length + "    initTimer : " + allImages[usedIndex].getInitialCreation() );
+    println( "Is finish ? " + this.allImages[usedIndex].isFinish());
+  }
+  
+  int getEmptyIndex() {
+    for (int currentIndex = 0; currentIndex < this.allImages.length; currentIndex++) {
+       if(this.allImages[currentIndex] == null) {
+         return currentIndex;
+       }
+    }
+    return this.getOldestImage();
+  }
+  
+  int getOldestImage() {
+    float minimumTimer = millis() + 365*24*3600*10;
+    int index = 0;
+    for (int currentIndex = 0; currentIndex < this.allImages.length; currentIndex++) {
+      DisplayedImage image = this.allImages[currentIndex];
+      if (image.getInitialCreation() <= minimumTimer) {
+        minimumTimer = image.getInitialCreation();
+        index = currentIndex;
+      }
+    }
+    return index;
+  }
+  
+  void displayImages() {
+    int nbImage = 0;
+    String debugAlpha = "";
+    for (int currentIndex = 0; currentIndex < this.allImages.length; currentIndex++) {
+      DisplayedImage ci = this.allImages[currentIndex];
+      if (ci == null) {
+        // Nothing to do with an empty image
+      } else if (ci.isFinish() ) {
+        // If the image is finished we detroyed this image
+        allImages[currentIndex] = null;
+      } else {
+        debugAlpha += "index[" + currentIndex + "] = " + ci.getCurrentAlpha();
+        // Display image in other case
+        tint(255, 255, 255, ci.getCurrentAlpha());
+        image(ci.getImage(), 0, 40, 640, 640); 
+         nbImage++;
+      }
+    }
+    println( "Nb current images display: " + nbImage + " with " + debugAlpha);
+  }
+  
+}
+
+AllDisplayedImages imagesManager = null;
 
 void setup() {
   size(1280, 720, P3D);
@@ -110,6 +258,8 @@ void setup() {
   if (DEBUG) println(objet.getRowCount() + " lignes dans la base"); 
   
   background(0);
+  
+  imagesManager = new AllDisplayedImages();
 }
 
 
@@ -136,55 +286,20 @@ void draw() {
     id = int(r_id);
     if (id < 1) id = 1;
     if (id > 1000) id = 1000;
-    chargerImageObjet(dossier_images, id);
-    objet_start = millis();
-    opacite_cache = 255;
-    //calculerFondus();
+    
+    // New way to display image
+    imagesManager.addImage(id, r_fadein, r_hold, r_fadeout);
+    
     nouvelle_reception = false;
   }
 
-  // Première partie (gauche) : afficher l'image *************************************
-  // soit on est en fadein, soit on est en hold, soit on est en fadeout, soit on clean l'affichage!
-  String debug_state = " stable ";
- 
-  if (millis() - objet_start < r_fadein) {                                                                        // fade in time
-    // Calcul des etapes restantes
-    float etapes = ( (objet_start + r_fadein) - millis() ) / (1000 / fps);
-    // Calcul de la nouvelle opacité du cache
-    opacite_cache = opacite_cache - (opacite_cache / etapes);
-    image(image_objet, 0, 40, 640, 640);
-    fill(0, opacite_cache);
-    rect(0, 40, 640, 640);
-    debug_state = " fadein ";
-  }
-  if ((millis() - objet_start > r_fadein) && (millis() - objet_start < r_fadein + r_hold)) {                      // hold time
-    // rien ne bouge!
-    opacite_cache = 0;
-    image(image_objet, 0, 40, 640, 640); 
-    debug_state = " hold ";
-  }
-  if ((millis() - objet_start > r_fadein + r_hold) && (millis() - objet_start < r_fadein + r_hold + r_fadeout)) { // fade out time
-    noStroke();
-    // Calcul des etapes restantes
-    float etapes = ( (objet_start + r_fadein + r_hold + r_fadeout) - millis() ) / (1000 / fps);
-    // Calcul de la nouvelle opacité du cache
-    opacite_cache = opacite_cache + (255 / etapes);
-    image(image_objet, 0, 40, 640, 640);
-    fill(0, opacite_cache);
-    rect(0, 40, 640, 640);
-    debug_state = " fadeout ";
-  }
-  if (millis() - objet_start > r_fadein + r_hold + r_fadeout) {                                                   // en attente !
-    opacite_cache = 255;
-    debug_state = " clean ";
-  }
+  imagesManager.displayImages();
   
   if (DEBUG) { // DEBUG : Affichage écran des étapes de fondu ********************
     textFont(police, 12);
     fill(0);
     rect(0, height - 20, width, 20);
     fill(150);
-    text(debug_state, 0, height - 4);
   }
   
   if (DEBUG) { // DEBUG : Affichage des valeurs reçues par OSC *******************
