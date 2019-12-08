@@ -83,7 +83,7 @@ float objet_start;         // en millisecondes, moment d'apparition de l'objet
 float opacite_cache = 255; // valeur d'opacité du cache noir utilisé pour les fondus
 
 // Add more evolve fadein/fadeout for multiple objects (max 8 right now with a maximum opacity of 50% [0.5])
-float MAX_OPACITY_EACH_IMAGE = 0.7;
+float MAX_OPACITY_EACH_IMAGE = 1.0;
 int MAX_IMAGES_SAME_TIME = 8;
 
 class DisplayedImage {
@@ -103,10 +103,13 @@ class DisplayedImage {
   int fadeoutBeginTimer = 0;
   int fadeoutEndTimer = 0;
   
+  float maximumIntensity = 1.0;
+  
   int currentIntervalDurationMs = 0;
   
-  DisplayedImage(int id, float fadeinDurationMs, float holdDurationMs, float fadeoutDurationMs) {
+  DisplayedImage(int id, float fadeinDurationMs, float holdDurationMs, float fadeoutDurationMs, float maximumIntensity) {
     this.initTimerMs = millis();
+    this.maximumIntensity = maximumIntensity / 255.0; // Intensity is between 0 to 255
     
     this.fadeinDurationMs = (int)fadeinDurationMs;
     this.holdDurationMs = (int)holdDurationMs;
@@ -158,7 +161,7 @@ class DisplayedImage {
       float t_end = this.fadeoutEndTimer - this.fadeoutBeginTimer;
       currentOpacity = 1.0 - (t_current / t_end);
     }
-    return currentOpacity * 255 * MAX_OPACITY_EACH_IMAGE;
+    return currentOpacity * 255 * this.maximumIntensity * MAX_OPACITY_EACH_IMAGE;
   }
   
   // Charger l'image quand un nouvel id est reçu, si jamais le fichier n'existe pas
@@ -178,9 +181,9 @@ class DisplayedImage {
 class AllDisplayedImages {
    DisplayedImage[] allImages = new DisplayedImage[MAX_IMAGES_SAME_TIME];
   
-  void addImage(int id, float fadeinDurationMs, float holdDurationMs, float fadeoutDurationMs) {
+  void addImage(int id, float fadeinDurationMs, float holdDurationMs, float fadeoutDurationMs, float maximumIntensity) {
      int usedIndex = this.getEmptyIndex();
-     this.allImages[usedIndex] = new DisplayedImage(id, fadeinDurationMs, holdDurationMs, fadeoutDurationMs);
+     this.allImages[usedIndex] = new DisplayedImage(id, fadeinDurationMs, holdDurationMs, fadeoutDurationMs, maximumIntensity);
     println( "Add image on index: " +usedIndex + " for image with the ID : " + id + ". Number of image: " + allImages.length + "    initTimer : " + allImages[usedIndex].getInitialCreation() );
     println( "Is finish ? " + this.allImages[usedIndex].isFinish());
   }
@@ -241,8 +244,10 @@ void setup() {
   oscP5 = new OscP5(this, 8003); // écoute des messages OSC sur le port 8003
   myRemoteLocation = new NetAddress("127.0.0.1", 12000);
 
+  // Mettre en place le gestionnaire d'images
+  imagesManager = new AllDisplayedImages();
   // Charger une image
-  chargerImageObjet(dossier_images, int(r_id));
+  imagesManager.addImage(int(r_id), 1.0, 2.0, 1.0, 1.0);
   
   // Charger la police 
   police = loadFont("BitstreamVeraSansMono-Roman-32.vlw");
@@ -258,8 +263,6 @@ void setup() {
   if (DEBUG) println(objet.getRowCount() + " lignes dans la base"); 
   
   background(0);
-  
-  imagesManager = new AllDisplayedImages();
 }
 
 
@@ -288,7 +291,7 @@ void draw() {
     if (id > 1000) id = 1000;
     
     // New way to display image
-    imagesManager.addImage(id, r_fadein, r_hold, r_fadeout);
+    imagesManager.addImage(id, r_fadein, r_hold, r_fadeout, r_level);
     
     nouvelle_reception = false;
   }
@@ -362,20 +365,6 @@ void draw() {
   stroke(0);
   ellipse(pixel_loc.x + planisphere_start.x, pixel_loc.y + planisphere_start.y, 6, 6);
   
-}
-
-
-// Charger l'image quand un nouvel id est reçu, si jamais le fichier n'existe pas
-// une image vide est créée à la place...
-void chargerImageObjet(String dir, int id) {
-  String chemin = dir + "/J" + id + ".jpg";
-  File f = dataFile(chemin);
-  if (f.isFile()) {
-      image_objet = loadImage(chemin);
-    } else {
-      println("Le fichier " + chemin + " n'existe pas");
-      image_objet = createImage(420, 420, RGB);
-    }
 }
 
 // Attribution des valeurs aux variables selon les messages OSC reçus 
