@@ -71,14 +71,17 @@ float lat, lon;     // coordonnées de l'objet dans le système GPS (WGS 84)
 PVector pixel_loc;  // coordonnées de l'objet sur la fond de carte en pixels
 PVector planisphere_start; // coordonnées d'affichage de la carte
 PImage planisphere;
+PImage pointeur;
 
 // Divers assets ***********************************************
-PFont police;
+PFont police1;
+PFont police2;
+PFont police3;
 int x_start, y_start; // variables utilisés pour l'affichage des données
 
 // Variables utilisées pour l'animation ************************
 int old_id = -1;
-float fps = 60;            // Frames par secondes, mis à jour dynamiquement ci-dessous
+float fps = 30;            // Frames par secondes, mis à jour dynamiquement ci-dessous
 float objet_start;         // en millisecondes, moment d'apparition de l'objet
 float opacite_cache = 255; // valeur d'opacité du cache noir utilisé pour les fondus
 
@@ -224,7 +227,7 @@ class AllDisplayedImages {
         debugAlpha += "index[" + currentIndex + "] = " + ci.getCurrentAlpha();
         // Display image in other case
         tint(255, 255, 255, ci.getCurrentAlpha());
-        image(ci.getImage(), 0, 40, 640, 640); 
+        image(ci.getImage(), 170, 50, 400, 400); 
          nbImage++;
       }
     }
@@ -236,7 +239,7 @@ class AllDisplayedImages {
 AllDisplayedImages imagesManager = null;
 
 void setup() {
-  size(1280, 720, P3D);
+  size(1280, 800, P3D);
   noCursor(); // Pour éviter qu'un curseur de souris se ballade ...
   frameRate(30);
   
@@ -250,32 +253,33 @@ void setup() {
   imagesManager.addImage(int(r_id), 1.0, 2.0, 1.0, 1.0);
   
   // Charger la police 
-  police = loadFont("BitstreamVeraSansMono-Roman-32.vlw");
+  police1 = loadFont("Gunplay-Regular-48.vlw");
+  police2 = loadFont("TlwgMono-Bold-48.vlw");
+  police3 = loadFont("TlwgMono-48.vlw");
   
   // Charger le fond de carte
-  planisphere = loadImage("mercator_540x288.png"); 
-  planisphere_start = new PVector(690, 382);
-  // définir l'objet de conversion coord. géoloc -> pixels
-  mm = new MercatorMap(540, 288, 75, -60, -180, 180);
+  planisphere = loadImage("mercator_540x288.jpg"); 
+  planisphere_start = new PVector(100, 450);
   
+  // Charger le pointeur de carte
+  pointeur = loadImage("dot.png");
+
+  // définir l'objet de conversion coord. géoloc -> pixels
+  mm = new MercatorMap(540, 288, 75, -60, -168, 192);
+    
   // Charger la base de données des objets
   objet = loadTable("data/" + base_objets, "header");
-  if (DEBUG) println(objet.getRowCount() + " lignes dans la base"); 
+  if (DEBUG) println(objet.getRowCount() + " lignes dans la base");
   
   background(0);
-}
 
+}
 
 
 void draw() {
   
   // Quel est le framerate réel ? On l'utilisera pour le calcul des fondus
   fps = frameRate;
-  
-  // Recouvrir le texte de noir à chaque frame
-  noStroke();
- // fill(0);
-  rect(690, 0, 590, height - planisphere_start.y + 10);
   
   // DEBUG
   if ( (DEBUG_NO_OSC) && (millis() - DEBUG_NO_OSC_last > 4000) ) {
@@ -295,76 +299,142 @@ void draw() {
     
     nouvelle_reception = false;
   }
+  
+  // Afficher l'image de l'objet ************************************************************
 
   imagesManager.displayImages();
-  
-  if (DEBUG) { // DEBUG : Affichage écran des étapes de fondu ********************
-    textFont(police, 12);
-    fill(0);
-    rect(0, height - 20, width, 20);
-    fill(150);
-  }
-  
-  if (DEBUG) { // DEBUG : Affichage des valeurs reçues par OSC *******************
-    fill(0);
-    rect(0, 0, width, 40);
-    fill(150);
-    noStroke();
-    textFont(police, 12);
-    text("DEBUG : fps : " + int(frameRate) + " -- /video/shape id : " + int(r_id) + ", level : " + r_level 
-         + ", fadein : " + int(r_fadein) + ", hold : " + int(r_hold) + ", fadeout : " + int(r_fadeout) 
-         //+ ", fadein_opacite : " + int(fadein_opacite) + ", fadeout_opacite : " + int(fadeout_opacite) 
-         + " -- " + "/video/param width : " + int(r_width) + ", height " + int(r_height), 10, 18);
-  }
-    
-  // Afficher les données correspondant à l'objet choisi *****************************
-   
-  TableRow ligne = objet.getRow(id-1);
-  
-  fill(255); // Couleur du texte
-  
-  textFont(police, 18);
-  x_start = 690;
-  y_start = 100;
-  
-  String o_date = ligne.getString("jour") + "/" + ligne.getString("mois") + "/" + ligne.getString("annee");
-  text("Jour " + ligne.getString("id") + " - " + o_date, x_start, y_start);
-  text(ligne.getString("depart") + " >> " + ligne.getString("arrivee"), x_start, y_start + 25);
-  
-  text(ligne.getString("lieu"), x_start, y_start + 75);
-  
-  if (!ligne.getString("objet").equals("0")) text(ligne.getString("objet"), x_start, y_start + 100);
-  if (!ligne.getString("contexte").equals("0"))text(ligne.getString("contexte"), x_start, y_start + 125);
-  
-  textFont(police, 14);
-  x_start = 690;
-  y_start = 260;
-  
-  text("Poids   : " + ligne.getInt("poids") + " g",   x_start, y_start);
-  text("Taille  : " + ligne.getInt("taille") + " mm", x_start, y_start + 20);
-  text("Couleur : " + ligne.getString("couleur"),     x_start, y_start + 40);
-  text("Matière : " + ligne.getString("matiere"),     x_start, y_start + 60);
-  text("Origine : " + ligne.getString("origine"),     x_start, y_start + 80);
-  
-  x_start = 900;
-  y_start = 260;
-  
-  lat = ligne.getFloat("lat_dec");
-  lon = ligne.getFloat("long_dec");
-  text("Latitude  : " + lat + "°",                          x_start, y_start);
-  text("Longitude : " + lon + "°",                          x_start, y_start + 20);
-  text("KMs jour  : " + ligne.getInt("kms") + " km",        x_start, y_start + 40);
-  text("KMs total : " + ligne.getInt("kms_cumule") + " km", x_start, y_start + 60);
-  text("Altitude  : " + ligne.getInt("alti") + " m",        x_start, y_start + 80);
   
   // Afficher le fond de carte et placer les coordonnées de l'objet *************************
   
   image(planisphere, planisphere_start.x, planisphere_start.y);
   pixel_loc = mm.getScreenLocation( new PVector(lat,lon) ); // conversion WGS84 -> écran
-  fill(255);
-  stroke(0);
-  ellipse(pixel_loc.x + planisphere_start.x, pixel_loc.y + planisphere_start.y, 6, 6);
+  blendMode(ADD);
+  image(pointeur, pixel_loc.x + planisphere_start.x - 50, pixel_loc.y + planisphere_start.y - 50, 100, 100);
+  blendMode(BLEND);
   
+  // Recouvrir le texte de noir à chaque frame **********************************************
+  noStroke();
+  fill(0);
+  rect(690, 0, 550, 800);
+    
+  // Afficher les données correspondant à l'objet choisi ************************************
+   
+  TableRow ligne = objet.getRow(id-1);
+  
+  x_start = 740;
+  y_start = 120;
+
+  fill(180); // Couleur du texte
+
+  textFont(police1, 24);
+  text("Jour " + ligne.getString("id"),                                                               x_start, y_start);
+
+  fill(255); // Couleur du texte
+
+  textFont(police2, 18);
+  text(ligne.getString("date_full"),                                                                  x_start, y_start + 35);
+  text(ligne.getString("pays"),                                                                       x_start, y_start + 65);
+  
+  textFont(police2, 16);
+  text(ligne.getString("lieu"),                                                                       x_start, y_start + 90);
+
+  textFont(police3, 14);
+  text(" | " + ligne.getString("gps"),                                                                x_start + 110, y_start + 65);
+  if (!ligne.getString("contexte").equals("0"))text(ligne.getString("contexte"),                      x_start, y_start + 110);
+    
+  y_start = 280;
+
+  textFont(police2, 20);
+  if (!ligne.getString("objet").equals("0")) text(ligne.getString("objet"),                           x_start, y_start);
+
+  textFont(police3, 14);
+  text("Poids   : ",                                                                                  x_start, y_start + 25);
+  text("Taille  : ",                                                                                  x_start, y_start + 40);
+  text("Couleur : ",                                                                                  x_start, y_start + 55);
+  text("Matière : ",                                                                                  x_start, y_start + 70);
+  text("Origine : ",                                                                                  x_start, y_start + 85);
+  
+  textFont(police2, 14);
+  text(ligne.getString("poids") + " g",                                                                  x_start + 100, y_start + 25);
+  text(ligne.getString("taille") + " mm",                                                                x_start + 100, y_start + 40);
+  text(ligne.getString("couleur"),                                                                    x_start + 100, y_start + 55);
+  text(ligne.getString("matiere"),                                                                    x_start + 100, y_start + 70);
+  text(ligne.getString("origine"),                                                                    x_start + 100, y_start + 85);
+  
+  y_start = 420;
+  
+  textFont(police3, 14);
+  text("Altitude  : ",                                                                                x_start, y_start);
+  text("Latitude  : ",                                                                                x_start, y_start + 20);
+  text("Longitude : ",                                                                                x_start, y_start + 40);
+
+  textFont(police2, 14);
+  text(ligne.getInt("alti") + " m",                                                                   x_start + 100, y_start);
+  lat = ligne.getFloat("lat_dec");
+  lon = ligne.getFloat("long_dec");
+  text(lat + "°",                                                                                     x_start + 100, y_start + 20);
+  text(lon + "°",                                                                                     x_start + 100, y_start + 40);
+
+  y_start = 500;
+  
+  textFont(police3, 14);
+  text("KMs jour  : ",                                                                                x_start, y_start + 20);
+  text("KMs total : ",                                                                                x_start, y_start + 40);
+
+  textFont(police2, 14);
+  text(ligne.getString("depart") + " >> " + ligne.getString("arrivee"),                               x_start, y_start);
+  text(ligne.getInt("kms") + " km",                                                                   x_start + 100, y_start + 20);
+  text(ligne.getInt("kms_cumule") + " km",                                                            x_start + 100, y_start + 40);
+
+  y_start = 600;
+  
+  fill(164); // Couleur du texte
+
+  textFont(police3, 12);
+  
+  text("Segment d'étape  : " + ligne.getInt("kms_etape_segments") + " km",                         x_start, y_start);
+  text("Segments cumulés : " + ligne.getInt("kms_etape_cumule") + " km",                           x_start, y_start + 15);
+  
+  text("Distance du départ (vol d'oiseau) : " + ligne.getInt("kms_depart_vol_oiseau") + " km",     x_start, y_start + 45);
+  text("Distance du départ (corde)        : " + ligne.getInt("kms_depart_corde") + " km",          x_start, y_start + 60);
+
+  text("Latitude  : " + ligne.getString("lat_rad") + " rad",                                          x_start, y_start + 90);
+  text("| " + ligne.getString("lat_dec"),                                                             x_start + 280, y_start + 90);
+  text("Longitude : " + ligne.getString("long_rad") + " rad",                                         x_start, y_start + 105);
+  text("| " + ligne.getString("long_dec"),                                                            x_start + 280, y_start + 105);
+  
+  if (DEBUG) { // DEBUG : Affichage écran des étapes de fondu *********************************
+    textFont(police3, 12);
+    fill(0);
+    rect(0, height - 20, width, 20);
+    fill(150);
+  }
+  
+  if (DEBUG) { // DEBUG : Affichage des valeurs reçues par OSC ********************************
+    fill(0);
+    rect(0, 0, width, 40);
+    fill(150);
+    noStroke();
+    textFont(police3, 12);
+    text("DEBUG : fps : " + int(frameRate) + " -- /video/shape id : " + int(r_id) + ", level : " + r_level 
+         + ", fadein : " + int(r_fadein) + ", hold : " + int(r_hold) + ", fadeout : " + int(r_fadeout) 
+         //+ ", fadein_opacite : " + int(fadein_opacite) + ", fadeout_opacite : " + int(fadeout_opacite) 
+         + " -- " + "/video/param width : " + int(r_width) + ", height " + int(r_height), 10, 18);
+  }
+  
+}
+
+// Charger l'image quand un nouvel id est reçu, si jamais le fichier n'existe pas
+// une image vide est créée à la place...
+void chargerImageObjet(String dir, int id) {
+  String chemin = dir + "/J" + id + ".jpg";
+  File f = dataFile(chemin);
+  if (f.isFile()) {
+      image_objet = loadImage(chemin);
+    } else {
+      println("Le fichier " + chemin + " n'existe pas");
+      image_objet = createImage(640, 640, RGB);
+    }
 }
 
 // Attribution des valeurs aux variables selon les messages OSC reçus 
